@@ -17,6 +17,10 @@ Description: A VPC stack to run Fargate Tasks in.
     "Type" : "String"
     "Default" : "10.0.1.0/24"
     "Description" : "The Subnet 2 CIDR block."
+  "ImageName" :
+    "Type" : "String"
+    "Default" : "timer"
+    "Description" : "The name of the task and ECR image."
 
 Resources:
 
@@ -72,6 +76,18 @@ Resources:
       DestinationCidrBlock: '0.0.0.0/0'
       GatewayId: !Ref 'InternetGateway'
 
+  RouteTableSubnet1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'PublicSubnetOne'
+      RouteTableId: !Ref 'PublicRouteTable'
+
+  RouteTableSubnet2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'PublicSubnetTwo'
+      RouteTableId: !Ref 'PublicRouteTable'
+
   # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
@@ -89,8 +105,8 @@ Resources:
         Statement:
         - Effect: Allow
           Principal:
-            Service: [ecs-tasks.amazonaws.com]
-          Action: ['sts:AssumeRole']
+            Service: ecs-tasks.amazonaws.com
+          Action: 'sts:AssumeRole'
       Policies:
       - PolicyName: Task
         PolicyDocument:
@@ -108,15 +124,62 @@ Resources:
         Statement:
         - Effect: Allow
           Principal:
-            Service: [ecs-tasks.amazonaws.com]
-          Action: ['sts:AssumeRole']
+            Service: ecs-tasks.amazonaws.com
+          Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
       Policies:
         - PolicyName: ExecTask
           PolicyDocument:
             Statement:
             - Effect: Allow
-              Action: 'logs:CreateLogGroup'
-              Resource: 'arn:aws:logs:::log-group:/ecs/*"'
+              Action: 
+                - 'logs:CreateLogGroup'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Resource: '*'
+            - Effect: Allow
+              Action: 'ecr:GetAuthorizationToken'
+              Resource: !GetAtt 'ECSCluster.Arn'
+          
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ImageName
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform: 
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX        
+      Cpu: 256
+      Memory: 512
+      ContainerDefinitions:
+        - Name: !Ref ImageName
+          Image: !Sub
+            - '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${I}:latest'
+            - I: !Ref ImageName
+          Cpu: 0
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+          Essential: true
+          EntryPoint: 
+            - python3.13
+          LogConfiguration: 
+            LogDriver: awslogs
+            Options: 
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Sub
+                - '/ecs/${I}'
+                - I: !Ref ImageName
+              mode: non-blocking
+              awslogs-create-group: true
+              max-buffer-size: 25m
+              awslogs-stream-prefix: ecs
 
 Outputs:
   ClusterName:
@@ -154,3 +217,26 @@ Outputs:
     Value: !Ref 'SecurityGroup'
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SecurityGroup' ] ]
+  RunCmd:
+    Description: AWS CLI command to run the task
+    Value: !Join
+      - ''
+      - - 'aws ecs run-task --cluster '
+        - !Ref 'ECSCluster'
+        - ' --task-definition timer --launch-type "FARGATE" --network-configuration "awsvpcConfiguration={subnets=['
+        - !Ref 'PublicSubnetOne'
+        - ','
+        - !Ref 'PublicSubnetTwo'
+        - '],securityGroups=['
+        - !Ref 'SecurityGroup'
+        - '],assignPublicIp=ENABLED}" --overrides '
+        - "'"
+        - '{ "containerOverrides": [{"name": "'
+        - !Ref ImageName
+        - '", "command": ["app.py", "--job_id", "2", "--duration", "2", "--bucket", "'
+        - !Ref Bucket
+        - '"]}]}'
+        - "'"
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'RunCmd' ] ]
+
