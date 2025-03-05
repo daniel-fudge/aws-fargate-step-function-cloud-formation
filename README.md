@@ -96,9 +96,14 @@ aws cloudformation delete-stack --stack-name task
 aws cloudformation wait stack-delete-complete --stack-name task
 ```
 
-
 ### Call the Fargate Task
+The ouput of the deployed stack includes the command to run a task from the CLI. The 
+command begins with `aws ecs run-task`. You can get this from the AWS console or you can
+run the command below.
 
+```shell
+aws cloudformation list-exports --query "Exports[*].[Value]" --output text | grep run-task
+```
 
 ## 5. Step Function
 
