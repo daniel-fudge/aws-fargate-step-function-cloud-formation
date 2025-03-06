@@ -5,7 +5,7 @@ Small repo that creates an AWS Step Function to call Fargate tasks with CloudFor
 This repo follows from this [repo](https://github.com/daniel-fudge/aws-fargate-step-function-demo) 
 which also deployed an AWS Step Function that calls Fargate tasks. However that repo 
 performed this with AWS CLI commands. This repo creates the same infrastructure but with 
-the AWS Cloud Formation (CF) Infrastrucutre as Code (IaC).
+the AWS CloudFormation (CF) Infrastrucutre as Code (IaC).
 
 We'll first create a stack with just the task to test it's functionality. Then create a 
 second stack with a Step Function that calls the tasks. This stack can be quickly modified 
@@ -37,8 +37,8 @@ export IMAGE_TAG=v1
 ### Create S3 bucket and an ECR repository
 Note you only have to do this once and you may also simply use an existing bucket and 
 repo. Since you may want to keep S3 objects after the stack has been deleted, you can't 
-make the bucket within the Cloudformation stack. You also can't push a Docker image into 
-ECR through Cloudformation, so it has to be done before you deploy the Task stack that 
+make the bucket within the CloudFormation stack. You also can't push a Docker image into 
+ECR through CloudFormation, so it has to be done before you deploy the Task stack that 
 requires the ECR image. Therefore the ECR repo must also be created before the stack is 
 deployed.
 
@@ -128,9 +128,8 @@ aws stepfunctions start-execution \
 rm -f temp.json
 ```
 
-
 ## 5. References
  - [CLI Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-demo)    
- - [Cloud Formation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
- - [AWS Cloudformation CLI](https://awscli.amazonaws.com/v2/documentation/api/2.1.29/reference/cloudformation/index.html#cli-aws-cloudformation)
- - [AWS Cloudformation Template Reference](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-reference.html)
+ - [CloudFormation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
+ - [AWS CloudFormation CLI](https://awscli.amazonaws.com/v2/documentation/api/2.1.29/reference/cloudformation/index.html#cli-aws-cloudformation)
+ - [AWS CloudFormation Template Reference](https://docs.aws.amazon.com/AWScloudformation/latest/UserGuide/template-reference.html)
