@@ -1,19 +1,22 @@
 # aws-fargate-step-function-cloud-formation
 Small repo that creates an AWS Step Function to call Fargate tasks with cloud formation.
+![image](CloudFormation-Fargate-Step-Function.png)
 
 This repo follows from this [repo](https://github.com/daniel-fudge/aws-fargate-step-function-demo) 
 which also deployed an AWS Step Function that calls Fargate tasks. However that repo 
 performed this with AWS CLI commands. This repo creates the same infrastructure but with 
 the AWS Cloud Formation (CF) Infrastrucutre as Code (IaC).
 
-We'll actually build the components with individual components first to validate each 
-piece and then we'll bring it all together in a single CF file.
-
+We'll first create a stack with just the task to test it's functionality. Then create a 
+second stack with a Step Function that calls the tasks. This stack can be quickly modified 
+to call a Lambda function that leverages the same ECR image like the previous 
+[repo](https://github.com/daniel-fudge/aws-fargate-step-function-demo). Here are the steps 
+we'll be following.
 1. Setup the environment
-1. Create the VPC and Task Roles
-
-1. Step Function
-1. Bring it all together
+1. Create and Publish Container to ECR
+1. Create the VPC and Fargate Task
+1. Add a Step Function to the Stack
+1. References
 
 ## 1. Setup the Environment
 ### Configure the AWS Console
