@@ -27,9 +27,6 @@ export AWS_PROFILE=[ENTER YOUR CLI PROFILE NAME HERE]
 export BUCKET=[ENTER YOUR BUCKET NAME HERE]
 export AWS_PAGER=""
 export AWS_REGION=us-east-1
-export CIDR_VPC=10.0.0.0/16
-export CIDR_SUBNET1=10.0.0.0/24
-export CIDR_SUBNET2=10.0.1.0/24
 export IMAGE_NAME=timer
 export IMAGE_TAG=v1
 ```
@@ -79,15 +76,12 @@ docker tag ${IMAGE_NAME}:${IMAGE_TAG} $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazon
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/${IMAGE_NAME}:latest
 ```
 
-## 2. Create the VPC and Fargate Task
+## 3. Create the VPC and Fargate Task
 Create the stack and wait for it to be completed.
 ```shell
 aws cloudformation create-stack --stack-name task --template-body file://task.yml \
---capabilities CAPABILITY_NAMED_IAM --parameters \
-ParameterKey=Bucket,ParameterValue=${BUCKET} \
-ParameterKey=CidrVpc,ParameterValue=${CIDR_VPC} \
-ParameterKey=CidrSubnet1,ParameterValue=${CIDR_SUBNET1} \
-ParameterKey=CidrSubnet2,ParameterValue=${CIDR_SUBNET2}
+--capabilities CAPABILITY_NAMED_IAM --disable-rollback \
+--parameters ParameterKey=Bucket,ParameterValue=${BUCKET}
 aws cloudformation wait stack-create-complete --stack-name task
 ```
 To delete the stack and wait for it to be deleted:
@@ -105,14 +99,35 @@ run the command below.
 aws cloudformation list-exports --query "Exports[*].[Value]" --output text | grep run-task
 ```
 
-## 5. Step Function
+## 4. Add a Step Function to the Stack
+REMINDER: Delete the stack created in the previous step. This section will create a 
+completely new stack and does not require the previous stack.
 
-## 6. Bring it all together
+Create the stack and wait for it to be completed.
+```shell
+aws cloudformation create-stack --stack-name step --template-body file://step.yml \
+--capabilities CAPABILITY_NAMED_IAM --disable-rollback \
+--parameters ParameterKey=Bucket,ParameterValue=${BUCKET}
+aws cloudformation wait stack-create-complete --stack-name step
+```
+To delete the stack and wait for it to be deleted:
+```shell
+aws cloudformation delete-stack --stack-name step
+aws cloudformation wait stack-delete-complete --stack-name step
+```
 
-## 7. References
+### Invoke the step function
+```shell
+sed "s/BUCKET/${BUCKET}/" step-input-fargate.json > temp.json
+aws stepfunctions start-execution \
+--state-machine-arn arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_ID}:stateMachine:${IMAGE_NAME}-fargate \
+--input "$(cat temp.json)"
+rm -f temp.json
+```
+
+
+## 5. References
  - [CLI Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-demo)    
  - [Cloud Formation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
-
-
- https://docs.aws.amazon.com/codebuild/latest/userguide/cloudformation-vpc-template.html    
-
+ - [AWS Cloudformation CLI](https://awscli.amazonaws.com/v2/documentation/api/2.1.29/reference/cloudformation/index.html#cli-aws-cloudformation)
+ - [AWS Cloudformation Template Reference](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-reference.html)

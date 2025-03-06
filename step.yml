@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A ECS Fargate Task.
+Description: A Step Function that calls an ECS Fargate Tasks.
 
 "Parameters" :
   "Bucket" :
@@ -183,43 +183,111 @@ Resources:
               max-buffer-size: 25m
               awslogs-stream-prefix: ecs
 
+  # Step Function
+  StatesExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "iam:PassRole"
+                Resource: "*" 
+                Condition: 
+                  StringLike: 
+                    'iam:PassedToService': 
+                      - 'ecs-tasks.amazonaws.com'
+              - Effect: Allow
+                Action: "ecs:RunTask"
+                Resource: !Sub
+                  - 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${I}:*'
+                  - I: !Ref ImageName 
+              - Effect: Allow
+                Action: 
+                  - "ecs:StopTask"
+                  - "ecs:DescribeTasks"
+                Resource: !Sub
+                  - 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/${I}/*'
+                  - I: !Ref ImageName 
+              - Effect: Allow
+                Action: 
+                  - "events:PutTargets"
+                  - "events:PutRule"
+                  - "events:DescribeRule"
+                Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForECSTaskRule'
+
+  StepFunction:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      RoleArn: !GetAtt [ StatesExecutionRole, Arn ]
+      DefinitionString:
+        !Sub
+          - |-
+            {
+              "QueryLanguage": "JSONPath",
+              "Comment": "A delayed batch of Fargate timers",
+              "StartAt": "Timer-Batch",
+              "States": {
+                "Timer-Batch": {
+                  "Type": "Map",
+                  "End": true,
+                  "ItemsPath": "$.timer_info",
+                  "ItemProcessor": {
+                    "ProcessorConfig": {"Mode": "INLINE"},
+                    "StartAt": "Wait",
+                    "States": {
+                      "Wait": {
+                        "Type": "Wait",
+                        "SecondsPath": "$.delay",
+                        "Next": "Timer-Fargate"},
+                      "Timer-Fargate": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::ecs:runTask.sync",
+                        "End": true,
+                        "Parameters": {
+                          "LaunchType": "FARGATE",
+                          "Cluster": "${C}",
+                          "TaskDefinition": "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${I}",
+                          "NetworkConfiguration": {
+                            "AwsvpcConfiguration": {
+                              "Subnets": ["${SNOne}", "${SNTwo}"],
+                              "SecurityGroups": ["${SG}"],
+                              "AssignPublicIp": "ENABLED"}},
+                          "Overrides": {
+                            "ContainerOverrides": [{
+                              "Name": "${I}",
+                              "Command.$": "$.commands"}]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          - C: !GetAtt 'ECSCluster.Arn'
+            I: !Ref ImageName 
+            SG: !Ref 'SecurityGroup'
+            SNOne: !Ref 'PublicSubnetOne'
+            SNTwo: !Ref 'PublicSubnetTwo'
+
+# Output
 Outputs:
-  ClusterName:
-    Description: The name of the ECS cluster
-    Value: !Ref 'ECSCluster'
+  StepFunction:
+    Description: The ARN of the Step Function
+    Value: !GetAtt 'StepFunction.Arn'
     Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ClusterName' ] ]
-  TaskRole:
-    Description: The ARN of the Task role
-    Value: !GetAtt 'TaskRole.Arn'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'TaskRole' ] ]
-  TaskExecutionRole:
-    Description: The ARN of the Task Execution role
-    Value: !GetAtt 'TaskExecutionRole.Arn'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'TaskExecutionRole' ] ]
-  VPCId:
-    Description: The ID of the VPC that this stack is deployed in
-    Value: !Ref 'VPC'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VPCId' ] ]
-  PublicSubnetOne:
-    Description: Public subnet one
-    Value: !Ref 'PublicSubnetOne'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnetOne' ] ]
-  PublicSubnetTwo:
-    Description: Public subnet two
-    Value: !Ref 'PublicSubnetTwo'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnetTwo' ] ]
-  SecurityGroup:
-    Description: A security group used to allow Fargate containers to receive traffic
-    Value: !Ref 'SecurityGroup'
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SecurityGroup' ] ]
-  RunCmd:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'StepFunction' ] ]
+  TaskRunCmd:
     Description: AWS CLI command to run the task
     Value: !Join
       - ''
@@ -240,5 +308,18 @@ Outputs:
         - '"]}]}'
         - "'"
     Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'RunCmd' ] ]
-
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'TaskRunCmd' ] ]
+  StepRunCmd:
+    Description: AWS CLI command to run the Step Function
+    Value: !Join
+      - ''
+      - - !Sub
+          - 'aws stepfunctions start-execution --state-machine-arn ${SM} --input '
+          - SM: !GetAtt 'StepFunction.Arn'
+        - "'"
+        - !Sub
+          - '{"timer_info": [{"delay": 0, "commands": ["app.py", "--job_id", "1", "--duration", "3", "--bucket", "${B}"]},{"delay": 2,"commands": ["app.py", "--job_id", "2", "--duration", "4", "--bucket", "${B}"]}]}"'
+          - B: !Ref Bucket
+        - "'"
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'StepRunCmd' ] ]
