@@ -1,5 +1,5 @@
 # aws-fargate-step-function-cloud-formation
-Small repo that creates an AWS Step Function to call Fargate tasks with cloud formation.
+Small repo that creates an AWS Step Function to call Fargate tasks with CloudFormation.
 ![image](CloudFormation-Fargate-Step-Function.png)
 
 This repo follows from this [repo](https://github.com/daniel-fudge/aws-fargate-step-function-demo) 
