@@ -120,16 +120,17 @@ aws cloudformation wait stack-delete-complete --stack-name step
 ```
 
 ### Invoke the step function
+The ouput of the deployed stack includes the command to run the Step Function from the 
+CLI. The command begins with `aws stepfunctions start-execution`. You can get this from 
+the AWS console or you can run the command below.
+
 ```shell
-sed "s/BUCKET/${BUCKET}/" step-input-fargate.json > temp.json
-aws stepfunctions start-execution \
---state-machine-arn arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_ID}:stateMachine:${IMAGE_NAME}-fargate \
---input "$(cat temp.json)"
-rm -f temp.json
+aws cloudformation list-exports --query "Exports[*].[Value]" --output text | grep start-execution
 ```
 
 ## 5. References
  - [CLI Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-demo)    
+ - [Terraform Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-terraform)    
  - [CloudFormation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
  - [AWS CloudFormation CLI](https://awscli.amazonaws.com/v2/documentation/api/2.1.29/reference/cloudformation/index.html#cli-aws-cloudformation)
  - [AWS CloudFormation Template Reference](https://docs.aws.amazon.com/AWScloudformation/latest/UserGuide/template-reference.html)
