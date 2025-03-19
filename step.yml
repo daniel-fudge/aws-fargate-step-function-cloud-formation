@@ -138,7 +138,7 @@ Resources:
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
               Resource: !Sub
-                - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/{$I}:*'
+                - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${I}:*'
                 - I: !Ref ImageName
             - Effect: Allow
               Action: 'ecr:GetAuthorizationToken'
